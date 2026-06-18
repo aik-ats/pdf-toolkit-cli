@@ -14,6 +14,13 @@ except ImportError:
 
 console = Console()
 
+def ask(*args, **kwargs):
+    """Prompt.ask のラッパー。入力欄を画面の左下に固定して表示する。"""
+    height = console.size.height
+    sys.stdout.write(f"\x1b[{height};1H\x1b[2K")
+    sys.stdout.flush()
+    return Prompt.ask(*args, **kwargs)
+
 def print_menu():
     menu_text = (
         "[cyan]1.[/cyan] PDFをパスワードで暗号化する（手動／環境変数）\n"
@@ -47,7 +54,7 @@ def get_output_path(input_path: str, suffix: str) -> str:
 def confirm_overwrite(out_path: str) -> bool:
     """出力ファイルが既に存在する場合、上書きするかどうかを確認する"""
     if os.path.exists(out_path):
-        ans = Prompt.ask(f"[bold red]警告: ファイル '{os.path.basename(out_path)}' は既に存在します。上書きしますか？[/bold red] [y/N]", choices=["y", "n"], default="n").strip().lower()
+        ans = ask(f"[bold red]警告: ファイル '{os.path.basename(out_path)}' は既に存在します。上書きしますか？[/bold red] [y/N]", choices=["y", "n"], default="n").strip().lower()
         if ans != 'y':
             console.print("[yellow]処理をキャンセルしました。[/yellow]")
             return False
@@ -60,7 +67,7 @@ def check_multiple_overwrite(out_dir: str, base_name: str, ext: str = None) -> b
         if f.startswith(base_name):
             if ext and not f.lower().endswith(ext.lower()):
                 continue
-            ans = Prompt.ask(f"[bold red]警告: 出力先ディレクトリに、出力ファイル名と前方一致するファイル（{f} など）が存在するようです。上書きされる可能性があります。続行しますか？[/bold red] [y/N]", choices=["y", "n"], default="n").strip().lower()
+            ans = ask(f"[bold red]警告: 出力先ディレクトリに、出力ファイル名と前方一致するファイル（{f} など）が存在するようです。上書きされる可能性があります。続行しますか？[/bold red] [y/N]", choices=["y", "n"], default="n").strip().lower()
             if ans != 'y':
                 console.print("[yellow]処理をキャンセルしました。[/yellow]")
                 return False
@@ -69,7 +76,7 @@ def check_multiple_overwrite(out_dir: str, base_name: str, ext: str = None) -> b
 
 def get_single_file_input(prompt: str) -> str:
     while True:
-        user_input = Prompt.ask(f"[bold yellow]{prompt}[/bold yellow]").strip()
+        user_input = ask(f"[bold yellow]{prompt}[/bold yellow]").strip()
         if not user_input:
             console.print("[yellow]入力がキャンセルされました。[/yellow]")
             return ""
@@ -84,7 +91,7 @@ def get_single_file_input(prompt: str) -> str:
 
 def get_multiple_files_input(prompt: str) -> list[str]:
     while True:
-        user_input = Prompt.ask(f"[bold yellow]{prompt}[/bold yellow]").strip()
+        user_input = ask(f"[bold yellow]{prompt}[/bold yellow]").strip()
         if not user_input:
             console.print("[yellow]入力がキャンセルされました。[/yellow]")
             return []
@@ -101,7 +108,7 @@ def get_multiple_files_input(prompt: str) -> list[str]:
 def main():
     while True:
         print_menu()
-        choice = Prompt.ask("[bold]番号を選んでください[/bold]").strip().lower()
+        choice = ask("[bold]番号を選んでください[/bold]").strip().lower()
         
         if choice == 'q':
             console.print("[bold green]終了します。お疲れ様でした！[/bold green]")
@@ -111,7 +118,7 @@ def main():
             in_path = get_single_file_input("暗号化するPDFのパスを入力（またはD&D）")
             if not in_path: continue
             
-            pwd = Prompt.ask("[bold yellow]設定するパスワードを入力（空欄で環境変数 PDF_DEFAULT_PASSWORD を使用）[/bold yellow]", password=True).strip()
+            pwd = ask("[bold yellow]設定するパスワードを入力（空欄で環境変数 PDF_DEFAULT_PASSWORD を使用）[/bold yellow]", password=True).strip()
             if not pwd:
                 pwd = os.environ.get("PDF_DEFAULT_PASSWORD", "")
                 if not pwd:
@@ -167,7 +174,7 @@ def main():
             in_path = get_single_file_input("復号するPDFのパスを入力（またはD&D）")
             if not in_path: continue
             
-            pwd = Prompt.ask("[bold yellow]現在のパスワードを入力[/bold yellow]", password=True).strip()
+            pwd = ask("[bold yellow]現在のパスワードを入力[/bold yellow]", password=True).strip()
             out_path = get_output_path(in_path, "decrypted")
             
             if not confirm_overwrite(out_path):
@@ -193,7 +200,7 @@ def main():
             except Exception:
                 pass
                 
-            ranges = Prompt.ask("[bold yellow]抽出するページを指定（例: 1,3,5-7）未指定で全ページ[/bold yellow]").strip()
+            ranges = ask("[bold yellow]抽出するページを指定（例: 1,3,5-7）未指定で全ページ[/bold yellow]").strip()
             out_path = get_output_path(in_path, "extracted")
             
             if not confirm_overwrite(out_path):
@@ -216,7 +223,7 @@ def main():
             except Exception:
                 pass
                 
-            spec = Prompt.ask("[bold yellow]分割するページ番号をカンマ区切りで指定（例: 3,5 / 空欄で1ページずつバラバラに分割）[/bold yellow]").strip()
+            spec = ask("[bold yellow]分割するページ番号をカンマ区切りで指定（例: 3,5 / 空欄で1ページずつバラバラに分割）[/bold yellow]").strip()
             out_dir = os.path.dirname(in_path) or "."
             
             base_name = os.path.splitext(os.path.basename(in_path))[0]
@@ -270,7 +277,7 @@ def main():
             in_path = get_single_file_input("画像に変換するPDFのパスを入力（またはD&D）")
             if not in_path: continue
             
-            fmt = Prompt.ask("[bold yellow]出力フォーマットを入力 (png または jpg, デフォルトはpng)[/bold yellow]").strip().lower()
+            fmt = ask("[bold yellow]出力フォーマットを入力 (png または jpg, デフォルトはpng)[/bold yellow]").strip().lower()
             if fmt not in ['png', 'jpg', 'jpeg']:
                 fmt = 'png'
             if fmt == 'jpeg': fmt = 'jpg'
