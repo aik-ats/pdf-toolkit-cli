@@ -3,9 +3,13 @@ echo PDF Toolkit Build Script
 echo ------------------------
 
 if not exist venv (
-    echo [ERROR] venv directory not found. Please setup environment first.
-    pause
-    exit /b
+    echo venv directory not found. Creating virtual environment...
+    python -m venv venv
+    if errorlevel 1 (
+        echo [ERROR] Failed to create virtual environment. Is Python installed and on PATH?
+        pause
+        exit /b
+    )
 )
 
 echo Activating virtual environment...
