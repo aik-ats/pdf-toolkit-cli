@@ -1,6 +1,90 @@
 import os
 import sys
 import shlex
+
+
+def _find_console_hwnd(user32, kernel32):
+    """表示されているコンソール／ターミナルのウィンドウハンドルを取得する。
+
+    Windows 11 の既定ターミナル(Windows Terminal)では GetConsoleWindow() が
+    非表示の疑似ウィンドウを返し SetWindowPos が効かないため、コンソールの
+    タイトルを一意な文字列に一時変更して FindWindow で実ウィンドウを探す。
+    """
+    import ctypes
+    import time
+
+    # 現在のタイトルを保存
+    buf = ctypes.create_unicode_buffer(1024)
+    kernel32.GetConsoleTitleW(buf, 1024)
+    original_title = buf.value
+
+    unique_title = f"__pdftoolkit_pos__{os.getpid()}"
+    kernel32.SetConsoleTitleW(unique_title)
+
+    hwnd = 0
+    # ウィンドウタイトルが反映されるまで少し待ってリトライ
+    for i in range(20):
+        hwnd = user32.FindWindowW(None, unique_title)
+        if hwnd:
+            break
+        time.sleep(0.02)
+
+    # タイトルを元に戻す
+    kernel32.SetConsoleTitleW(original_title)
+
+    # 見つからなければ従来の GetConsoleWindow にフォールバック
+    if not hwnd:
+        hwnd = kernel32.GetConsoleWindow()
+    return hwnd
+
+
+def move_console_to_bottom_left():
+    """コンソールウィンドウを画面左下（タスクバーを除いた作業領域）に移動する。Windows以外では何もしない。"""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.windll.user32
+        kernel32 = ctypes.windll.kernel32
+
+        hwnd = _find_console_hwnd(user32, kernel32)
+        if not hwnd:
+            return
+
+        # 移動中のちらつきを防ぐため、いったんウィンドウを隠す（SW_HIDE = 0）
+        user32.ShowWindow(hwnd, 0)
+
+        try:
+            # 現在のウィンドウの大きさを取得
+            rect = wintypes.RECT()
+            if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+                return
+            win_height = rect.bottom - rect.top
+
+            # タスクバーを除いた作業領域を取得（SPI_GETWORKAREA = 0x0030）
+            work_area = wintypes.RECT()
+            if not user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(work_area), 0):
+                return
+
+            x = work_area.left
+            y = work_area.bottom - win_height
+
+            # SWP_NOSIZE(0x0001) | SWP_NOZORDER(0x0004) で位置のみ変更
+            user32.SetWindowPos(hwnd, 0, x, y, 0, 0, 0x0001 | 0x0004)
+        finally:
+            # 移動が成功・失敗いずれの場合もウィンドウを再表示する（SW_SHOW = 5）
+            user32.ShowWindow(hwnd, 5)
+    except Exception:
+        # 位置変更に失敗しても本来の処理は継続する
+        pass
+
+
+# ウィンドウ位置を重いインポート(rich / PyMuPDF)より前に確定させ、
+# 中央に一瞬表示されるちらつきを防ぐ。
+move_console_to_bottom_left()
+
 import pdf_core
 
 try:
